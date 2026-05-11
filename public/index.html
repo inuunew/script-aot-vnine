@@ -1,32 +1,140 @@
-<script>
-    const fileInput = document.getElementById('fileInput');
-    const uploadBtn = document.getElementById('uploadBtn');
-
-    uploadBtn.addEventListener('click', async () => {
-        if (!fileInput.files[0]) return alert("Pilih file!");
-
-        const formData = new FormData();
-        formData.append('fileToUpload', fileInput.files[0]);
-
-        uploadBtn.innerText = "Processing...";
-        
-        try {
-            // Memanggil API internal Vercel kita sendiri
-            const response = await fetch('/api/upload', {
-                method: 'POST',
-                body: formData
-            });
-
-            const link = await response.text();
-            if (response.ok) {
-                document.getElementById('result').innerHTML = `Link: <a href="${link}">${link}</a>`;
-            } else {
-                alert("Upload Gagal");
-            }
-        } catch (e) {
-            alert("Error: " + e.message);
-        } finally {
-            uploadBtn.innerText = "Upload";
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image to URL | InuuTyzDev</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
         }
-    });
-</script>
+        .glass-card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+        }
+        .neon-border {
+            box-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-6">
+
+    <div class="glass-card neon-border w-full max-w-md p-8 text-center">
+        <h1 class="text-2xl font-bold mb-2 text-sky-400">Image to URL</h1>
+        <p class="text-gray-400 text-sm mb-6">Ubah foto menjadi link via Catbox API</p>
+
+        <!-- Preview Area -->
+        <div id="previewContainer" class="hidden mb-6">
+            <img id="imagePreview" class="w-full h-48 object-cover rounded-xl border-2 border-dashed border-sky-500/50">
+        </div>
+
+        <!-- Input Area -->
+        <div class="space-y-4">
+            <label class="block">
+                <span class="sr-only">Pilih foto</span>
+                <input type="file" id="fileInput" accept="image/*" 
+                    class="block w-full text-sm text-slate-500
+                    file:mr-4 file:py-2 file:px-4
+                    file:rounded-full file:border-0
+                    file:text-sm file:font-semibold
+                    file:bg-sky-50 file:text-sky-700
+                    hover:file:bg-sky-100 cursor-pointer"/>
+            </label>
+
+            <button id="uploadBtn" 
+                class="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold py-3 rounded-xl transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed">
+                Generate URL
+            </button>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loader" class="hidden mt-6">
+            <div class="animate-spin inline-block w-6 h-6 border-[3px] border-current border-t-transparent text-sky-500 rounded-full" role="status"></div>
+            <p class="text-sm text-sky-400 mt-2">Sedang memproses...</p>
+        </div>
+
+        <!-- Result Area -->
+        <div id="resultBox" class="hidden mt-8 p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+            <p class="text-xs text-gray-500 mb-2 uppercase tracking-wider">Hasil Link:</p>
+            <div class="flex items-center gap-2">
+                <input type="text" id="urlOutput" readonly 
+                    class="bg-transparent text-sky-300 text-sm w-full outline-none">
+                <button onclick="copyToClipboard()" class="text-gray-400 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="DocumentDuplicateIcon" />
+                        <path d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const previewContainer = document.getElementById('previewContainer');
+        const imagePreview = document.getElementById('imagePreview');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const loader = document.getElementById('loader');
+        const resultBox = document.getElementById('resultBox');
+        const urlOutput = document.getElementById('urlOutput');
+
+        // Preview foto saat dipilih
+        fileInput.addEventListener('change', function() {
+            const file = this.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = e => {
+                    imagePreview.src = e.target.result;
+                    previewContainer.classList.remove('hidden');
+                }
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Proses Upload
+        uploadBtn.addEventListener('click', async () => {
+            if (!fileInput.files[0]) return alert("Pilih foto dulu!");
+
+            const formData = new FormData();
+            formData.append('fileToUpload', fileInput.files[0]);
+
+            // Set UI State
+            uploadBtn.disabled = true;
+            loader.classList.remove('hidden');
+            resultBox.classList.add('hidden');
+
+            try {
+                // SANGAT PENTING: Panggil file API di Vercel, bukan Catbox langsung
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const link = await response.text();
+
+                if (response.ok) {
+                    urlOutput.value = link.trim();
+                    resultBox.classList.remove('hidden');
+                } else {
+                    throw new Error("Gagal mengunggah");
+                }
+            } catch (err) {
+                alert("Kesalahan: " + err.message);
+            } finally {
+                uploadBtn.disabled = false;
+                loader.classList.add('hidden');
+            }
+        });
+
+        function copyToClipboard() {
+            urlOutput.select();
+            document.execCommand('copy');
+            alert("URL disalin ke clipboard!");
+        }
+    </script>
+</body>
+</html>
